@@ -1,6 +1,0 @@
-{
-  "name": "VL53L0X Kalman Filter Lab",
-  "description": "Интерактивная лаборатория, схема подключения и готовый README для проекта фильтрации данных датчика VL53L0X с фильтром Калмана и стробированием на Arduino.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
