@@ -44,7 +44,7 @@ const int GREEN_PIN = 10;
 // Delta_max — порог стробирования (максимально допустимый скачок за один такт, в метрах)
 float Q = 0.2;
 float R = 0.5;
-float Delta_max = 0.3; // 30 см (0.3 м)
+float Delta_max = 0.05; // 30 см (0.3 м)
 
 // Переменные состояния фильтра
 float x_est = 0.0;         // Оценка расстояния (в метрах)
@@ -86,58 +86,42 @@ void setup() {
 
 void loop() {
   VL53L0X_RangingMeasurementData_t measure;
-  
-  // Выполняем измерение расстояния
   lox.rangingTest(&measure, false);
 
-  // RangeStatus == 0 — строго валидный замер дальномера
-  // (коды 1-4 соответствуют ошибкам уровня сигнала, фазы или перекрытия)
-  if (measure.RangeStatus == 0) {
-    // Переводим миллиметры в метры
+  // Игнорируем только статус 4 (полностью вне зоны видимости), остальное берем!
+  if (measure.RangeStatus != 4) {
     float z_k = measure.RangeMilliMeter / 1000.0;
 
-    // Начальная инициализация при первом валидном замере
     if (!isInitialized) {
       x_est = z_k;
       isInitialized = true;
       consecutiveAnomalies = 0;
     }
 
-    // 1. Этап прогноза (Prediction)
     float x_pred = x_est;
     float P_pred = P + Q;
-
-    // 2. Стробирование (Проверка невязки измерения)
-    // fabs() используется для корректного взятия модуля от float
+    
+    // Считаем скачок (невязку)
     float residual = fabs(z_k - x_pred);
 
     if (residual <= Delta_max) {
-      // === НОРМА: Замер принимается фильтром ===
+      // === НОРМА ===
       consecutiveAnomalies = 0;
-
-      // Коэффициент Калмана
       float K = P_pred / (P_pred + R);
-
-      // Коррекция оценки и ковариации ошибки
       x_est = x_pred + K * (z_k - x_pred);
       P = (1.0 - K) * P_pred;
 
-      // Индикация: Зеленый горит, красный выключен
       digitalWrite(GREEN_PIN, HIGH);
       digitalWrite(RED_PIN, LOW);
     } else {
-      // === АНОМАЛИЯ / ВЫБРОС: Замер игнорируется ===
+      // === АНОМАЛИЯ (СТРОБИРОВАНИЕ) ===
       consecutiveAnomalies++;
-
-      // Сохраняем предыдущий прогноз
       x_est = x_pred;
       P = P_pred;
 
-      // Индикация: Красный горит, зеленый выключен
       digitalWrite(GREEN_PIN, LOW);
       digitalWrite(RED_PIN, HIGH);
 
-      // Защита от залипания: если препятствие реально сместилось и долго там находится
       if (consecutiveAnomalies > MAX_ANOMALIES) {
         x_est = z_k;
         P = 1.0;
@@ -145,13 +129,14 @@ void loop() {
       }
     }
 
-    // Вывод в Serial Plotter (Ctrl+Shift+L в Arduino IDE):
-    // Формат: "Сырые_данные,Фильтрованные_данные"
+    // Выводим в Плоттер порта 3 графика:
+    // Синий - датчик, Красный - фильтр, Зеленый - размер скачка
     Serial.print(z_k, 3);
     Serial.print(",");
-    Serial.println(x_est, 3);
+    Serial.print(x_est, 3);
+    Serial.print(",");
+    Serial.println(residual, 3);
   }
-
-  // Пауза между измерениями (20 Гц)
+  
   delay(50);
 }
